@@ -19,7 +19,7 @@ except ImportError:
 
 # ========================================================== #
 MIN_FOLLOWERS = 30
-THREAD_COUNT = 80
+THREAD_COUNT = 30
 
 OUTPUT_FILE = "FinderResults.txt"
 
@@ -410,35 +410,35 @@ if __name__ == "__main__":
     else:
         config["discord"]["enabled"] = False
 
-        if config["discord"]["enabled"]:
-            print(
-                f"{Colors.GREEN}[INFO] {Colors.WHITE}Discord Notifications Enabled!{Colors.RESET}"
-            )
+    if config["discord"]["enabled"]:
+        print(
+            f"{Colors.GREEN}[INFO] {Colors.WHITE}Discord Notifications Enabled!{Colors.RESET}"
+        )
 
-        webhook_url = config["discord"]["webhook_url"]
+    webhook_url = config["discord"]["webhook_url"]
 
-        message = {
-            "embeds": [
-                {
-                    "title": "🔔 Discord Notifications Enabled",
-                    "description": f"Webhook URL: **{webhook_url}**",
-                    "color": 5763719,
-                    "footer": {"text": "Instagram Username Finder"},
-                }
-            ]
-        }
+    message = {
+        "embeds": [
+            {
+                "title": "🔔 Discord Notifications Enabled",
+                "description": f"Webhook URL: **{webhook_url}**",
+                "color": 5763719,
+                "footer": {"text": "Instagram Username Finder"},
+            }
+        ]
+    }
 
-        response = requests.post(webhook_url, json=message)
+    response = requests.post(webhook_url, json=message)
 
-        if response.status_code == 204:
-            print(
-                f"{Colors.GREEN}[INFO] {Colors.WHITE}Discord Notification Sent Successfully!{Colors.RESET}"
-            )
+    if response.status_code == 204:
+        print(
+            f"{Colors.GREEN}[INFO] {Colors.WHITE}Discord Notification Sent Successfully!{Colors.RESET}"
+        )
 
-        else:
-            print(
-                f"{Colors.RED}[ERROR] {Colors.WHITE}Failed To Send Discord Notification!{Colors.RESET}"
-            )
+    else:
+        print(
+            f"{Colors.RED}[ERROR] {Colors.WHITE}Failed To Send Discord Notification!{Colors.RESET}"
+        )
 
     save_config(config)
 
