@@ -322,14 +322,14 @@ def print_stats():
     print(
         f"""
     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-    ┃  {Colors.BOLD}{Colors.CYAN}Instagram Username Finder{Colors.RESET}                 ┃
+    ┃  {Colors.BOLD}{Colors.CYAN}Instagram Username Finder{Colors.RESET}                 
     ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-    ┃  {Colors.GREEN}● Available Usernames : {available_usernames:>5}{Colors.RESET}                ┃
-    ┃  {Colors.YELLOW}● Total Checks       : {total_checks:>5}{Colors.RESET}                ┃
-    ┃  {Colors.MAGENTA}● Success Rate       : {success_rate:.2f}%{Colors.RESET}               ┃
+    ┃  {Colors.GREEN}● Available Usernames : {available_usernames:>5}{Colors.RESET}                
+    ┃  {Colors.YELLOW}● Total Checks       : {total_checks:>5}{Colors.RESET}                
+    ┃  {Colors.MAGENTA}● Success Rate       : {success_rate:.2f}%{Colors.RESET}               
     ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-    ┃  {Colors.BLUE}● Runtime            : {int(runtime // 3600)}h {int((runtime % 3600) // 60)}m {int(runtime % 60)}s{Colors.RESET}        ┃
-    ┃  {Colors.CYAN}● Current Time       : {current_time}{Colors.RESET}           ┃
+    ┃  {Colors.BLUE}● Runtime            : {int(runtime // 3600)}h {int((runtime % 3600) // 60)}m {int(runtime % 60)}s{Colors.RESET}        
+    ┃  {Colors.CYAN}● Current Time       : {current_time}{Colors.RESET}           
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
     
     {Colors.GRAY}Press Ctrl+C to stop the process{Colors.RESET}
@@ -357,8 +357,8 @@ def main():
 
         banner = f"""
         {Colors.CYAN}╔══════════════════════════════════════════════╗
-        ║ {Colors.WHITE}Instagram Username Finder {Colors.YELLOW}v1.1{Colors.CYAN}             ║
-        ║ {Colors.GRAY}Finds available Instagram usernames{Colors.CYAN}        ║
+        ║ {Colors.WHITE}Instagram Username Finder {Colors.YELLOW}v1.1{Colors.CYAN}             
+        ║ {Colors.GRAY}Finds available Instagram usernames{Colors.CYAN}        
         ╚══════════════════════════════════════════════╝{Colors.RESET}
         """
         print(banner)
