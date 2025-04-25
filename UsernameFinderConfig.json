@@ -2,5 +2,9 @@
     "discord": {
         "enabled": true,
         "webhook_url": "https://discord.com/api/webhooks/1364985014298873966/2oX91Rf34X6PslnkzCjjhFS-0hmhL9WEXNotDHRrUvW_6NOyUl_wtbR5tLaPUd0HYY9J"
+    },
+    "notification_settings": {
+        "interval_minutes": 1,
+        "enabled": true
     }
 }
