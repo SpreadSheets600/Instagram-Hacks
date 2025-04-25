@@ -1,4 +1,3 @@
-# ========================================================== #
 import os
 import re
 import json
@@ -17,18 +16,19 @@ except ImportError:
     import requests
     from user_agent import generate_user_agent
 
-# ========================================================== #
+
 MIN_FOLLOWERS = 30
-THREAD_COUNT = 30
+THREAD_COUNT = 10
 
 OUTPUT_FILE = "FinderResults.txt"
 
-# ========================================================== #
+
 bad_instas = 0
+total_checks = 0
 matches_found = 0
 no_gmail_match = 0
-
-# ========================================================== #
+last_notification_time = 0
+notification_frequency = 100
 
 
 class Colors:
@@ -39,27 +39,265 @@ class Colors:
     MAGENTA = "\033[1;95m"
     CYAN = "\033[1;96m"
     WHITE = "\033[1;97m"
+    GRAY = "\033[1;90m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
     RESET = "\033[0m"
 
+    @staticmethod
+    def success(text):
+        return f"{Colors.GREEN}{text}{Colors.RESET}"
 
-# ========================================================== #
+    @staticmethod
+    def error(text):
+        return f"{Colors.RED}{text}{Colors.RESET}"
+
+    @staticmethod
+    def warning(text):
+        return f"{Colors.YELLOW}{text}{Colors.RESET}"
+
+    @staticmethod
+    def info(text):
+        return f"{Colors.BLUE}{text}{Colors.RESET}"
+
+    @staticmethod
+    def highlight(text):
+        return f"{Colors.BOLD}{Colors.CYAN}{text}{Colors.RESET}"
+
+
 def clear_screen():
     os.system("clear" if os.name == "posix" else "cls")
 
 
 def print_stats(last_checked_email=""):
     clear_screen()
+
+    success_rate = (matches_found / total_checks * 100) if total_checks > 0 else 0
+
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%H:%M:%S")
+
+    from itertools import cycle
+
+    spinner = cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+    spin_char = next(spinner)
+
+    header = f"{Colors.BOLD}{Colors.CYAN}Instagram Account Finder{Colors.RESET}"
+
     print(
         f"""
-        ___________________________________
-        {Colors.GREEN} Matches : [ {matches_found} ] 
-        {Colors.RED} Bad Accounts : [ {bad_instas} ] 
-        {Colors.YELLOW} Gmail Matches : [ {no_gmail_match} ]
-
-        {Colors.BLUE} Last Checked : [ {last_checked_email} ]
-        ___________________________________
-        """
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃  {header}                             
+    ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+    ┃  {Colors.GREEN}● Matches Found    : {matches_found:>5}{Colors.RESET}                      
+    ┃  {Colors.RED}● Invalid Accounts  : {bad_instas:>5}{Colors.RESET}                      
+    ┃  {Colors.YELLOW}● Gmail Mismatches  : {no_gmail_match:>5}{Colors.RESET}                      
+    ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+    ┃  {Colors.BLUE}● Total Processed   : {total_checks:>5}{Colors.RESET}                      
+    ┃  {Colors.MAGENTA}● Success Rate      : {success_rate:.2f}%{Colors.RESET}                    
+    ┃  {Colors.CYAN}● Current Time      : {current_time}{Colors.RESET}                 
+    ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+    ┃  {Colors.WHITE}Last Checked: {Colors.YELLOW}{last_checked_email[:30]}{Colors.RESET}{"..." if len(last_checked_email) > 30 else ""}  
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    
+    {spin_char} {Colors.GRAY}Running with {THREAD_COUNT} threads... Press Ctrl+C to stop{Colors.RESET}
+    """
     )
+
+
+def send_discord_notification(data, webhook_url, profile_info=None):
+    if not webhook_url:
+        return False
+
+    try:
+
+        if profile_info:
+
+            profile_url = f"https://instagram.com/{profile_info['username']}"
+
+            fields = [
+                {
+                    "name": "👤 Username",
+                    "value": f"[@{profile_info['username']}]({profile_url})",
+                    "inline": True,
+                },
+                {
+                    "name": "📧 Email",
+                    "value": f"{profile_info['email']}",
+                    "inline": True,
+                },
+            ]
+
+            if profile_info["recovery_email"] != "Not Available":
+                fields.append(
+                    {
+                        "name": "🔄 Recovery Email",
+                        "value": f"{profile_info['recovery_email']}",
+                        "inline": False,
+                    }
+                )
+
+            fields.extend(
+                [
+                    {
+                        "name": "👥 Followers",
+                        "value": f"{profile_info['followers']}",
+                        "inline": True,
+                    },
+                    {
+                        "name": "👣 Following",
+                        "value": f"{profile_info['following']}",
+                        "inline": True,
+                    },
+                    {
+                        "name": "📊 Posts",
+                        "value": f"{profile_info['posts']}",
+                        "inline": True,
+                    },
+                ]
+            )
+
+            if profile_info["biography"] and profile_info["biography"] != "N/A":
+                fields.append(
+                    {
+                        "name": "📝 Biography",
+                        "value": f"{profile_info['biography'][:1000]}",
+                        "inline": False,
+                    }
+                )
+
+            message = {
+                "embeds": [
+                    {
+                        "title": f"✅ Instagram Account Found: {profile_info['full_name']}",
+                        "url": profile_url,
+                        "description": f"**Account ID**: `{profile_info['user_id']}`",
+                        "color": 3066993,
+                        "fields": fields,
+                        "thumbnail": {
+                            "url": f"https://ui-avatars.com/api/?name={profile_info['username']}&background=random"
+                        },
+                        "footer": {
+                            "text": "Instagram Username Finder • Account Details"
+                        },
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                    }
+                ]
+            }
+        else:
+
+            message = {
+                "embeds": [
+                    {
+                        "title": "✅ Instagram Account Found",
+                        "description": f"{data}",
+                        "color": 5763719,
+                        "footer": {"text": "Instagram Username Finder"},
+                    }
+                ]
+            }
+
+        response = requests.post(webhook_url, json=message)
+
+        if response.status_code == 204:
+            print(f"{Colors.success('Discord Notification Sent!')}")
+            return True
+        else:
+            print(
+                f"{Colors.error(f'Failed To Send Discord Notification! Status: {response.status_code}')}"
+            )
+            return False
+    except Exception as e:
+        print(f"{Colors.error(f'Error Sending Discord Notification: {e}')}")
+        return False
+
+
+def send_stats_notification(webhook_url):
+    if not webhook_url:
+        return False
+
+    try:
+        import datetime
+
+        total_processed = total_checks if total_checks > 0 else 1
+        success_rate = (matches_found / total_processed) * 100
+
+        success_bar = create_progress_bar(success_rate, 20)
+
+        uptime_seconds = (
+            time() - last_notification_time if last_notification_time > 0 else 60
+        )
+        uptime_hours = max(uptime_seconds / 3600, 0.01)
+        checks_per_hour = round(total_checks / uptime_hours)
+
+        message = {
+            "embeds": [
+                {
+                    "title": "📊 Instagram Username Finder - Status Report",
+                    "description": f"**Current Session Status**\n{success_bar} `{success_rate:.2f}%`",
+                    "color": 3447003,
+                    "fields": [
+                        {
+                            "name": "✅ Accounts Found",
+                            "value": f"`{matches_found}` accounts",
+                            "inline": True,
+                        },
+                        {
+                            "name": "❌ Bad Accounts",
+                            "value": f"`{bad_instas}` accounts",
+                            "inline": True,
+                        },
+                        {
+                            "name": "⚠️ Gmail Mismatches",
+                            "value": f"`{no_gmail_match}` accounts",
+                            "inline": True,
+                        },
+                        {
+                            "name": "🔍 Total Checks",
+                            "value": f"`{total_checks}` checks",
+                            "inline": True,
+                        },
+                        {
+                            "name": "⚡ Processing Rate",
+                            "value": f"`{checks_per_hour}` checks/hour",
+                            "inline": True,
+                        },
+                        {
+                            "name": "🧵 Active Threads",
+                            "value": f"`{THREAD_COUNT}` threads",
+                            "inline": True,
+                        },
+                    ],
+                    "footer": {
+                        "text": "Instagram Username Finder • Auto-generated Status Report"
+                    },
+                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                }
+            ]
+        }
+
+        response = requests.post(webhook_url, json=message)
+
+        if response.status_code == 204:
+            print(f"{Colors.success('Stats Notification Sent!')}")
+            return True
+        else:
+            print(
+                f"{Colors.error(f'Failed To Send Stats Notification! Status: {response.status_code}')}"
+            )
+            return False
+    except Exception as e:
+        print(f"{Colors.error(f'Error Sending Stats Notification: {e}')}")
+        return False
+
+
+def create_progress_bar(percent, length=10):
+    """Create a visual progress bar for Discord embeds"""
+    filled = int(percent * length / 100)
+    empty = length - filled
+
+    return f"{'█' * filled}{'░' * empty}"
 
 
 def get_google_token():
@@ -235,56 +473,45 @@ def get_instagram_profile(username):
         }
 
         output = f"""
-        INSTAGRAM ACCOUNT INFO ~
-        ------------------------------------
-        NAME: {profile_info['full_name']}
+        {Colors.BOLD}{Colors.CYAN}INSTAGRAM ACCOUNT INFO{Colors.RESET}
+        {Colors.GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.RESET}
+        {Colors.BOLD}NAME:{Colors.RESET} {Colors.WHITE}{profile_info['full_name']}{Colors.RESET}
         
-        EMAIL: {username}@gmail.com
-        RECOVERY EMAIL: {profile_info['recovery_email']}
+        {Colors.BOLD}EMAIL:{Colors.RESET} {Colors.WHITE}{username}@gmail.com{Colors.RESET}
+        {Colors.BOLD}RECOVERY EMAIL:{Colors.RESET} {Colors.WHITE}{profile_info['recovery_email']}{Colors.RESET}
 
-        USERNAME: @{username}
+        {Colors.BOLD}USERNAME:{Colors.RESET} {Colors.GREEN}@{username}{Colors.RESET}
         
-        FOLLOWERS: {profile_info['followers']}
-        FOLLOWING: {profile_info['following']}
+        {Colors.BOLD}FOLLOWERS:{Colors.RESET} {Colors.YELLOW}{profile_info['followers']}{Colors.RESET}
+        {Colors.BOLD}FOLLOWING:{Colors.RESET} {Colors.YELLOW}{profile_info['following']}{Colors.RESET}
         
-        ID: {profile_info['user_id']}
-        BIO: {profile_info['biography']}
+        {Colors.BOLD}ID:{Colors.RESET} {Colors.WHITE}{profile_info['user_id']}{Colors.RESET}
+        {Colors.BOLD}BIO:{Colors.RESET} {Colors.GRAY}{profile_info['biography']}{Colors.RESET}
         
-        POSTS: {profile_info['posts']}
-        ------------------------------------
+        {Colors.BOLD}POSTS:{Colors.RESET} {Colors.MAGENTA}{profile_info['posts']}{Colors.RESET}
+        {Colors.GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.RESET}
         """
         print(output)
 
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         with open(OUTPUT_FILE, "a") as f:
-            f.write(f"{output}\n")
+            f.write(f"[{timestamp}] {output}\n")
 
         if config["discord"]["enabled"]:
             webhook_url = config["discord"]["webhook_url"]
-            message = {
-                "embeds": [
-                    {
-                        "title": f"Instagram Account Found: @{username}",
-                        "description": output,
-                        "color": 16711680,
-                        "footer": {"text": "Instagram Username Finder"},
-                    }
-                ]
-            }
+            if webhook_url:
 
-            response = requests.post(webhook_url, json=message)
-
-            if response.status_code == 204:
-                print(f"{Colors.GREEN}Discord Notification Sent!{Colors.RESET}")
-            else:
-                print(f"{Colors.RED}Failed To Send Discord Notification!{Colors.RESET}")
+                send_discord_notification(output, webhook_url, profile_info)
 
     except Exception as e:
-        print(f"Error Retrieving Profile : {e}")
+        print(f"{Colors.error(f'Error Retrieving Profile: {e}')}")
 
 
 def check_instagram_account(email):
-    """Check If An Instagram Account Exists"""
-    global bad_instas, no_gmail_match
+    global bad_instas, no_gmail_match, total_checks, last_notification_time
 
     try:
         csrftoken = md5(str(time()).encode()).hexdigest()
@@ -320,11 +547,26 @@ def check_instagram_account(email):
     except:
         pass
 
+    total_checks += 1
+
+    if config["discord"]["enabled"]:
+        current_time = time()
+        if config["notification_settings"]["time_based"]:
+            interval_seconds = config["notification_settings"]["interval_minutes"] * 60
+            if current_time - last_notification_time > interval_seconds:
+                send_stats_notification(config["discord"]["webhook_url"])
+                last_notification_time = current_time
+
+        else:
+            stats_frequency = config["notification_settings"]["stats_frequency"]
+            if total_checks % stats_frequency == 0:
+                send_stats_notification(config["discord"]["webhook_url"])
+                last_notification_time = current_time
+
     print_stats(email)
 
 
 def find_instagram_accounts():
-    """Find Instagram Accounts With High Follower Count"""
     while True:
         try:
             id = str(randrange(1900000000, 2100000000))
@@ -373,77 +615,173 @@ def save_config(config):
 def load_config():
     try:
         with open("AccountFinderConfig.json", "r") as f:
-            return json.load(f)
+            config = json.load(f)
+            if "discord" not in config:
+                config["discord"] = {"enabled": False, "webhook_url": ""}
+            if "notification_settings" not in config:
+                config["notification_settings"] = {
+                    "stats_frequency": 100,
+                    "interval_minutes": 15,
+                    "time_based": True,
+                }
+            return config
     except (FileNotFoundError, json.JSONDecodeError):
         return {
             "discord": {"enabled": False, "webhook_url": ""},
+            "notification_settings": {
+                "stats_frequency": 100,
+                "time_based": True,
+                "interval_minutes": 15,
+            },
         }
 
 
 if __name__ == "__main__":
+    import datetime
+
+    try:
+        from colorama import init
+
+        init()
+    except ImportError:
+        os.system("pip install colorama")
+        from colorama import init
+
+        init()
+
     clear_screen()
-    print(
-        f"\n{Colors.RESET}{Colors.YELLOW}[1/2]  Instagram Account Finder\n  ----------------------\n"
-    )
+
+    banner = f"""
+    {Colors.CYAN}╔══════════════════════════════════════════════╗
+    ║ {Colors.WHITE}Instagram Account Finder {Colors.YELLOW}v1.1{Colors.CYAN}                ║
+    ║ {Colors.GRAY}Developed by SurgePrivate{Colors.CYAN}                    ║
+    ╚══════════════════════════════════════════════╝{Colors.RESET}
+    """
+    print(banner)
 
     config = load_config()
 
     print(
-        f"{Colors.RESET}{Colors.YELLOW}[2/2] {Colors.WHITE}Discord Notification Setup :"
+        f"{Colors.YELLOW}[1/3] {Colors.WHITE}Discord Notification Setup:{Colors.RESET}"
     )
     use_discord = (
-        input(f"  Enable Discord Notifications? (Y/N) : {Colors.CYAN}").upper() == "Y"
+        input(
+            f"  {Colors.GRAY}› {Colors.WHITE}Enable Discord notifications? (Y/N): {Colors.CYAN}"
+        ).upper()
+        == "Y"
     )
 
     if use_discord:
         config["discord"]["enabled"] = True
 
         if config["discord"]["webhook_url"]:
-            webhook_prompt = f"  Webhook URL [{config['discord']['webhook_url'][:20]}...]: {Colors.CYAN}"
+            webhook_prompt = f"  {Colors.GRAY}› {Colors.WHITE}Webhook URL [{config['discord']['webhook_url'][:20]}...]: {Colors.CYAN}"
         else:
-            webhook_prompt = f"  Webhook URL: {Colors.CYAN}"
+            webhook_prompt = (
+                f"  {Colors.GRAY}› {Colors.WHITE}Webhook URL: {Colors.CYAN}"
+            )
 
         webhook_url = input(webhook_prompt)
         config["discord"]["webhook_url"] = (
             webhook_url if webhook_url else config["discord"]["webhook_url"]
         )
+
+        print(
+            f"\n{Colors.YELLOW}[2/3] {Colors.WHITE}Notification Settings:{Colors.RESET}"
+        )
+
+        print(f"  {Colors.GRAY}› {Colors.WHITE}Notification mode:")
+        print(
+            f"    {Colors.GRAY}1. {Colors.WHITE}Time-based (Reports After Every X Minutes)"
+        )
+        print(
+            f"    {Colors.GRAY}2. {Colors.WHITE}Count-based (Reports After Every X Checks)"
+        )
+
+        notification_type = input(
+            f"  {Colors.GRAY}› {Colors.WHITE}Choose Mode [1-2]: {Colors.CYAN}"
+        )
+
+        if notification_type == "2":
+            config["notification_settings"]["time_based"] = False
+
+            freq_prompt = f"  {Colors.GRAY}› {Colors.WHITE}Send Report Every X Checks [{config['notification_settings']['stats_frequency']}]: {Colors.CYAN}"
+            freq = input(freq_prompt)
+
+            if freq and freq.isdigit():
+                config["notification_settings"]["stats_frequency"] = int(freq)
+        else:
+            config["notification_settings"]["time_based"] = True
+
+            minutes_prompt = f"  {Colors.GRAY}› {Colors.WHITE}Send Report Every X Minutes [{config['notification_settings']['interval_minutes']}]: {Colors.CYAN}"
+            minutes = input(minutes_prompt)
+
+            if minutes and minutes.isdigit():
+                config["notification_settings"]["interval_minutes"] = int(minutes)
     else:
         config["discord"]["enabled"] = False
 
-    if config["discord"]["enabled"]:
-        print(
-            f"{Colors.GREEN}[INFO] {Colors.WHITE}Discord Notifications Enabled!{Colors.RESET}"
-        )
+    print(f"\n{Colors.YELLOW}[3/3] {Colors.WHITE}Performance Settings:{Colors.RESET}")
 
-    webhook_url = config["discord"]["webhook_url"]
+    threads_prompt = f"  {Colors.GRAY}› {Colors.WHITE}Number Of Threads [{THREAD_COUNT}]: {Colors.CYAN}"
+    threads = input(threads_prompt)
 
-    message = {
-        "embeds": [
-            {
-                "title": "🔔 Discord Notifications Enabled",
-                "description": f"Webhook URL: **{webhook_url}**",
-                "color": 5763719,
-                "footer": {"text": "Instagram Username Finder"},
-            }
-        ]
-    }
+    if threads and threads.isdigit() and 1 <= int(threads) <= 100:
+        THREAD_COUNT = int(threads)
 
-    response = requests.post(webhook_url, json=message)
+    followers_prompt = f"  {Colors.GRAY}› {Colors.WHITE}Minimum Followers [{MIN_FOLLOWERS}]: {Colors.CYAN}"
+    followers = input(followers_prompt)
 
-    if response.status_code == 204:
-        print(
-            f"{Colors.GREEN}[INFO] {Colors.WHITE}Discord Notification Sent Successfully!{Colors.RESET}"
-        )
-
-    else:
-        print(
-            f"{Colors.RED}[ERROR] {Colors.WHITE}Failed To Send Discord Notification!{Colors.RESET}"
-        )
+    if followers and followers.isdigit():
+        MIN_FOLLOWERS = int(followers)
 
     save_config(config)
 
-    print(f"\nStarting Search With {THREAD_COUNT} Threads ...")
-    print(f"Results Will Be Saved To {OUTPUT_FILE}\n")
+    if config["discord"]["enabled"]:
+        print(f"\n{Colors.success('✓ Discord notifications enabled')}")
+
+        webhook_url = config["discord"]["webhook_url"]
+
+        startup_message = {
+            "embeds": [
+                {
+                    "title": "🚀 Instagram Account Finder Started",
+                    "description": "The Instagram Account Finder has been started and is now searching for accounts.",
+                    "color": 5814783,
+                    "fields": [
+                        {
+                            "name": "🧵 Threads",
+                            "value": f"`{THREAD_COUNT}` threads",
+                            "inline": True,
+                        },
+                        {
+                            "name": "👥 Min. Followers",
+                            "value": f"`{MIN_FOLLOWERS}` followers",
+                            "inline": True,
+                        },
+                        {
+                            "name": "📊 Notification Mode",
+                            "value": f"{'Time-based' if config['notification_settings']['time_based'] else 'Count-based'}",
+                            "inline": True,
+                        },
+                    ],
+                    "footer": {"text": "Instagram Username Finder • Session Started"},
+                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                }
+            ]
+        }
+
+        requests.post(webhook_url, json=startup_message)
+
+    print(f"\n{Colors.highlight('Starting search...')}")
+    print(
+        f"{Colors.GRAY}› Running with {Colors.CYAN}{THREAD_COUNT}{Colors.GRAY} threads"
+    )
+    print(f"{Colors.GRAY}› Minimum followers: {Colors.CYAN}{MIN_FOLLOWERS}")
+    print(f"{Colors.GRAY}› Results will be saved to {Colors.CYAN}{OUTPUT_FILE}")
+    print(f"{Colors.GRAY}› Press Ctrl+C to stop the process{Colors.RESET}\n")
+
+    last_notification_time = time()
 
     threads = []
     for _ in range(THREAD_COUNT):
@@ -456,5 +794,36 @@ if __name__ == "__main__":
         for t in threads:
             t.join()
     except KeyboardInterrupt:
-        print("\nSearch Stopped By User")
-        print(f"Found {matches_found} Matches. Results Saved To {OUTPUT_FILE}")
+
+        if config["discord"]["enabled"]:
+            shutdown_message = {
+                "embeds": [
+                    {
+                        "title": "🛑 Instagram Account Finder Stopped",
+                        "description": "The Instagram Account Finder has been stopped by the user.",
+                        "color": 15548997,
+                        "fields": [
+                            {
+                                "name": "✅ Accounts Found",
+                                "value": f"`{matches_found}` accounts",
+                                "inline": True,
+                            },
+                            {
+                                "name": "🔍 Total Checks",
+                                "value": f"`{total_checks}` checks",
+                                "inline": True,
+                            },
+                        ],
+                        "footer": {"text": "Instagram Username Finder • Session Ended"},
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                    }
+                ]
+            }
+
+            webhook_url = config["discord"]["webhook_url"]
+            requests.post(webhook_url, json=shutdown_message)
+
+        print(f"\n{Colors.warning('Search stopped by user')}")
+        print(
+            f"{Colors.info(f'Found {matches_found} matches')} • {Colors.GRAY}Results saved to {OUTPUT_FILE}{Colors.RESET}"
+        )
